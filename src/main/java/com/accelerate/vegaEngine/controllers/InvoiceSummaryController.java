@@ -1,16 +1,19 @@
 package com.accelerate.vegaEngine.controllers;
 
-import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.accelerate.vegaEngine.models.*;
-
+import com.accelerate.vegaEngine.models.SumByPaymentMode;
 
 import com.accelerate.vegaEngine.CouchDBRestClient;
 import org.json.JSONTokener;
 import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
+
 import org.json.JSONArray;
 
 
@@ -18,14 +21,12 @@ import org.json.JSONArray;
 public class InvoiceSummaryController {
 
     @RequestMapping("/sumbybillingmode")
-    public String summary(@RequestParam("mode_name") String mode_name, @RequestParam("start_date") String start_date, @RequestParam("end_date") String end_date) {
+    public InvoiceSummaryBillingMode summary(@RequestParam("mode_name") String mode_name, @RequestParam("start_date") String start_date, @RequestParam("end_date") String end_date) {
 
     	//Validate parameters
     	if(mode_name == ""){
-    		return "Mode Name not mentioned";
+    		//return "Mode Name not mentioned";
     	}
-    	
-    	String DatabaseName = "";
     	
     	CouchDBRestClient ServerRequest = new CouchDBRestClient();
     	String req_url = "/zaitoon_invoices/_design/invoice-summary/_view/sumbybillingmode?startkey=["+mode_name+","+start_date+"]&endkey=["+mode_name+","+end_date+"]";
@@ -39,37 +40,13 @@ public class InvoiceSummaryController {
     	
     	int summary_sum = resultObject.getInt("sum");
     	
-    	String result = "The total sales is Rs. "+summary_sum;
+    	SumByPaymentMode test_mode_1 = new SumByPaymentMode("PayTM", 100);
+    	SumByPaymentMode test_mode_2 = new SumByPaymentMode("Cash", 240);
     	
-    	System.out.println(summary_sum);
+    	List<SumByPaymentMode> payment_splits = new ArrayList<SumByPaymentMode> ();
+    	payment_splits.add(0, test_mode_1);
+    	payment_splits.add(1, test_mode_2);
     	
-        return result;//ServerJSONResponse.getString("rows");
-        
-      //  return new InvoiceSummary(mode_name, start_date, end_date);
+        return new InvoiceSummaryBillingMode(mode_name, summary_sum, payment_splits);
     }
 }
-
-/* Summary by Billing Modes 
-
-[{
-"mode": "Dine",
-"amount": 24000,
-"splits": [{
-	"name": "Cash",
-	"amount": 10000
-}, {
-	"name": "Card",
-	"amount": 14000
-}]
-},
-{
-"mode": "Delivery",
-"amount": 8000,
-"splits": [{
-	"name": "Prepaid",
-	"amount": 8000
-}]
-}
-]
-
-*/
