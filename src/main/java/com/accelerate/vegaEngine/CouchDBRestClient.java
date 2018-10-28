@@ -5,11 +5,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 public class CouchDBRestClient {
 
-  private String server = "http://admin:admin@127.0.0.1:5984";
+  private String server = "http://admin:admin@127.0.0.1:5984"; //Test Server (Local)
+  
   private RestTemplate rest;
   private HttpHeaders headers;
   private HttpStatus status;
@@ -21,11 +24,11 @@ public class CouchDBRestClient {
     headers.add("Accept", "*/*");
   }
 
-  public String get(String uri) {
+  public String get(String uri) throws ResourceAccessException, HttpClientErrorException{
     HttpEntity<String> requestEntity = new HttpEntity<String>("", headers);
     ResponseEntity<String> responseEntity = rest.exchange(server + uri, HttpMethod.GET, requestEntity, String.class);
-    this.setStatus(responseEntity.getStatusCode());
-    return responseEntity.getBody();
+	this.setStatus(responseEntity.getStatusCode());
+	return responseEntity.getBody();
   }
 
   public String post(String uri, String json) {   
