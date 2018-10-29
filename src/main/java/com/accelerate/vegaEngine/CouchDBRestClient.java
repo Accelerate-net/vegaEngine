@@ -31,7 +31,7 @@ public class CouchDBRestClient {
 	return responseEntity.getBody();
   }
 
-  public String post(String uri, String json) {   
+  public String post(String uri, String json) throws ResourceAccessException, HttpClientErrorException{   
     HttpEntity<String> requestEntity = new HttpEntity<String>(json, headers);
     ResponseEntity<String> responseEntity = rest.exchange(server + uri, HttpMethod.POST, requestEntity, String.class);
     this.setStatus(responseEntity.getStatusCode());

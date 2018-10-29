@@ -1,7 +1,5 @@
 package com.accelerate.vegaEngine.models;
 
-import java.util.List;
-
 public class SumByPaymentMode {
 
     private String name;

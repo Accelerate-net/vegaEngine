@@ -7,13 +7,14 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
 import com.accelerate.vegaEngine.models.*;
-import com.accelerate.vegaEngine.models.SumByPaymentMode;
 import com.accelerate.vegaEngine.CouchDBRestClient;
 import org.json.JSONTokener;
 import org.json.JSONObject;
 
-import java.net.ConnectException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import org.json.JSONArray;
@@ -29,16 +30,26 @@ import com.accelerate.vegaEngine.exceptionHandling.ServerConnectionErrorExceptio
 public class InvoiceSummaryController {
 
     @RequestMapping("/sumbybillingmode")
-    public InvoiceSummaryBillingMode summary(@RequestParam("billing_mode") String billing_mode, @RequestParam("start_date") String start_date, @RequestParam("end_date") String end_date) throws ResourceNotFoundException, InvalidFormatException, ServerConnectionErrorException, NoResultsFoundException{
+    public InvoiceSummaryBillingMode summary(@RequestParam("start_date") String start_date, @RequestParam("end_date") String end_date) throws ResourceNotFoundException, InvalidFormatException, ServerConnectionErrorException, NoResultsFoundException{
 
+    	//Psuedo initialization of dates
+    	if(start_date == ""){
+    		start_date = "20180101"; //When the software was first released
+    	}
+    	
+    	if(end_date == ""){
+    		Date today = new Date();
+    		DateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
+    		
+    		end_date = dateFormat.format(today); //Today
+    	};
+    	
+    	
+    	
+    	//Parameter validation
     	SummaryDate reportStartDate = new SummaryDate(start_date);
     	SummaryDate reportEndDate = new SummaryDate(end_date);
-    	
-    	//Validate parameters
-    	if(billing_mode == "" || billing_mode == null){
-    		throw new ResourceNotFoundException("Billing Mode can not be empty");
-    	}
-    	    	
+        	    	
     	if(!reportStartDate.isValidDate()){
     		throw new InvalidFormatException(reportStartDate.validationMessage());
     	}
@@ -47,45 +58,101 @@ public class InvoiceSummaryController {
     		throw new InvalidFormatException(reportEndDate.validationMessage());
     	}
     	
+    	//Connection to billing server
     	CouchDBRestClient ServerRequest = new CouchDBRestClient();
-    	String req_url = "/zaitoon_invoices/_design/invoice-summary/_view/sumbybillingmode?startkey=[\""+billing_mode+"\",\""+reportStartDate.getDate()+"\"]&endkey=[\""+billing_mode+"\",\""+reportEndDate.getDate()+"\"]";
-    	System.out.println(req_url);
     	
     	
-    	String ServerResponse;
-    	//Sample Response: {"rows":[ {"key":null,"value":{"sum":22873,"count":136,"min":0,"max":4043,"sumsqr":24057163}} ]}
-		
+    	//STEP 1: Fetch all the billing modes
+    	String req_url_billing_modes = "/zaitoon_settings/_find";
+    	String response_billing_modes;
+    	
     	try {
-			ServerResponse = ServerRequest.get(req_url);
-		} catch (ResourceAccessException e) {
+    		response_billing_modes = ServerRequest.post(req_url_billing_modes, "{ \"selector\" :{ \"identifierTag\": \"ZAITOON_BILLING_MODES\" }, \"fields\" : [\"identifierTag\", \"value\"] }");  
+    	} catch (ResourceAccessException e) {
 			throw new ServerConnectionErrorException("Failed to communicate with the cloud billing server.");
 		} catch (HttpClientErrorException e){
 			throw new ServerConnectionErrorException("Bad Request. Check the parameters are in the required format.");
 		}
     	
+    	JSONObject responseJSON = new JSONObject(new JSONTokener(response_billing_modes));
+    	JSONArray allResultsArray = responseJSON.getJSONArray("docs");
     	
-    	JSONObject ServerJSONResponse = new JSONObject(new JSONTokener(ServerResponse));
-    	
-    	
-    	JSONArray rowsArray = ServerJSONResponse.getJSONArray("rows");
-    	JSONObject resultObject = null;
+    	JSONArray list_billing_modes = null;
     	
     	try{
-    		resultObject = ((JSONObject) rowsArray.get(0)).getJSONObject("value");
+    		list_billing_modes = ((JSONObject) allResultsArray.get(0)).getJSONArray("value");
     	} catch(JSONException e){
     		throw new NoResultsFoundException("No results found.");
     	}
     	
-
-    	int summary_sum = resultObject.getInt("sum");
     	
-    	SumByPaymentMode test_mode_1 = new SumByPaymentMode("PayTM", 100);
-    	SumByPaymentMode test_mode_2 = new SumByPaymentMode("Cash", 240);
+    	int billingModesCount = list_billing_modes.length();
+    	if(billingModesCount == 0){
+    		throw new NoResultsFoundException("No billing modes found.");
+    	}
     	
-    	List<SumByPaymentMode> payment_splits = new ArrayList<SumByPaymentMode> ();
-    	payment_splits.add(0, test_mode_1);
-    	payment_splits.add(1, test_mode_2);
     	
-        return new InvoiceSummaryBillingMode(billing_mode, summary_sum, payment_splits);
+    	//STEP 2: Fetch details of each billing mode
+    	String billing_mode = "";
+    	int billing_mode_sum = 0;
+    	int billing_mode_count = 0;
+    	JSONObject resultObject = null;
+    	List<SumByBillingMode> result_list_billing_modes = new ArrayList<SumByBillingMode> ();
+    	
+    	boolean isAtleastOneBillingMode = false;
+    	
+    	int n = 0;
+    	while(n < billingModesCount){
+    		billing_mode = ((JSONObject) list_billing_modes.get(n)).getString("name");
+    		
+        	if(billing_mode == "" || billing_mode == null){
+        		//Skip
+        	}
+        	else{
+        		
+	    		String req_url = "/zaitoon_invoices/_design/invoice-summary/_view/sumbybillingmode?startkey=[\""+billing_mode+"\",\""+reportStartDate.getDate()+"\"]&endkey=[\""+billing_mode+"\",\""+reportEndDate.getDate()+"\"]";
+	        	String ServerResponse;
+	        	//Sample Response: {"rows":[ {"key":null,"value":{"sum":22873,"count":136,"min":0,"max":4043,"sumsqr":24057163}} ]}
+	    		
+	        	try {
+	    			ServerResponse = ServerRequest.get(req_url);
+	    		} catch (ResourceAccessException e) {
+	    			throw new ServerConnectionErrorException("Failed to communicate with the cloud billing server.");
+	    		} catch (HttpClientErrorException e){
+	    			throw new ServerConnectionErrorException("Bad Request. Check the parameters are in the required format.");
+	    		}  
+	        	
+	        	responseJSON = new JSONObject(new JSONTokener(ServerResponse));
+	        	allResultsArray = responseJSON.getJSONArray("rows");
+	        	resultObject = null;
+	        	
+	        	try{
+	        		resultObject = ((JSONObject) allResultsArray.get(0)).getJSONObject("value");
+	        		billing_mode_sum = resultObject.getInt("sum");
+	        		billing_mode_count = resultObject.getInt("count");
+	        		
+	        		isAtleastOneBillingMode = true;
+	        		
+	        	} catch(JSONException e){
+	        		//No results found for this particular billing mode.
+	        		billing_mode_sum = 0;
+	        		billing_mode_count = 0;
+	        	}
+	        	
+	        	//add mode to list
+	        	SumByBillingMode selected_mode = new SumByBillingMode(billing_mode, billing_mode_sum, billing_mode_count);
+	        	result_list_billing_modes.add(n, selected_mode);
+	        	
+        	}
+        	
+    		n++;
+    	}
+    	
+    	if(isAtleastOneBillingMode){
+    		return new InvoiceSummaryBillingMode(true, 200, "", result_list_billing_modes);
+    	}
+    	else{
+    		return new InvoiceSummaryBillingMode(false, 200, "There are no recorded transactions.", null);
+    	}
     }
 }
